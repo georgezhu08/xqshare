@@ -5,7 +5,7 @@
 ## 特性
 
 - ✅ **完全透明** - 客户端用法与本地 xtquant 完全一致
-- ✅ **认证加密** - 支持 HMAC token 认证，可选 SSL/TLS 加密
+- ✅ **认证与权限** - 支持客户端密钥认证、账号等级权限控制，可选 SSL/TLS 加密
 - ✅ **断线重连** - 自动检测断线并重连，指数退避策略
 - ✅ **心跳保活** - 定期心跳检测，保持连接活跃
 - ✅ **异步回调** - 支持行情订阅等回调场景
@@ -48,15 +48,17 @@ pip install -e .
 
 ### 依赖
 
-```bash
-pip install rpyc
-```
+运行依赖会随 `pip install xqshare` 或 `pip install -e .` 自动安装：
+
+- `rpyc`
+- `python-dotenv`
+- `PyYAML`
 
 ## 快速启动
 
 ### 启动前准备
 
-**服务端（Windows）：** Python 环境 | 启动 miniQMT 并登录 | `pip install xqshare pyyaml`
+**服务端（Windows）：** Python 环境 | 启动 miniQMT 并登录 | `pip install xqshare`
 
 **客户端（macOS/Linux）：** Python 环境 | `pip install xqshare`
 
@@ -95,7 +97,7 @@ xtdata --limit 100 get_stock_list_in_sector --sector-name "沪深A股"
 xtdata get_market_data_ex --stock-list "['000001.SZ']" --period "1d" --start-time "20260101" --end-time "20260228"
 
 # 获取实时行情
-xtdata get_full_tick --stock-list "['000001.SZ', '600000.SH']"
+xtdata get_full_tick --code-list "['000001.SZ', '600000.SH']"
 ```
 
 ### xttrader - 交易工具
@@ -124,6 +126,9 @@ xttrader --account-id "12345678" order_stock --stock-code "000001.SZ" --order-ty
 | `--client-id` | XQSHARE_CLIENT_ID | 客户端标识 |
 | `--limit`, `-n` | - | 列表输出数量限制（默认50） |
 | `--verbose`, `-v` | - | 显示详细日志 |
+| `--output`, `-o` | - | 输出到文件 |
+| `--format`, `-f` | XQSHARE_FORMAT | 输出格式：text/json/csv |
+| `--compact` | - | JSON 紧凑输出 |
 
 ### 限制
 
@@ -195,7 +200,7 @@ python examples/get_stock_list.py --help
 ## API 文档
 
 ```python
-from xqshare import XtQuantRemote, connect, disconnect, xtdata, xttrader, xttype
+from xqshare import XtQuantRemote, connect, disconnect, xtdata, xttype
 
 # 方式1：类实例（推荐）
 with XtQuantRemote("192.168.1.100", client_secret="xxx") as xt:
@@ -210,6 +215,8 @@ disconnect()
 **核心属性/方法：**
 - `xt.xtdata` - 行情数据模块
 - `xt.xttype` - 类型定义模块（StockAccount 等）
+- `xt.xtconstant` - 常量模块
+- `xt.xtview` - 视图控制模块（取决于 xtquant 版本）
 - `xt.create_trader()` - 创建交易实例
 
 详细 API 请查看 [xqshare/client.py](xqshare/client.py) 源码。
@@ -245,9 +252,10 @@ with XtQuantRemote("192.168.1.100", client_secret="my-secret") as xt:
 from xqshare import XtQuantRemote
 
 with XtQuantRemote("192.168.1.100", client_secret="my-secret") as xt:
-    # 创建交易实例（已自动 start）
+    # 创建交易实例（不会自动 start）
     # userdata_path 可通过环境变量 QMT_USERDATA_PATH 配置
     trader = xt.create_trader("C:\\QMT\\userdata_mini")
+    trader.start()
 
     # 创建账户对象
     account = xt.xttype.StockAccount("12345678", "STOCK")
@@ -311,7 +319,7 @@ logs/
 **日志示例：**
 ```
 2026-02-28 23:45:12.345 | INFO     | api | [CALL] get_market_data | client=my-app@192.168.1.50 | args=(['000001.SZ'],) | kwargs={'period': '1d', 'start_time': '20260101'}
-2026-02-28 23:45:12.456 | INFO     | api | [OK] get_market_data | elapsed=111.23ms | result=DataFrame[shape=(100, 6)]
+2026-02-28 23:45:12.456 | INFO     | api | [OK] get_market_data | elapsed=111.23ms | result=<pandas.core.frame.DataFrame>
 
 2026-02-28 23:45:15.123 | INFO     | api | [CALL] get_full_tick | client=my-app@192.168.1.50 | args=(['000001.SZ'],) | kwargs={}
 2026-02-28 23:45:15.145 | INFO     | api | [OK] get_full_tick | elapsed=22.11ms | result=dict{000001.SZ}
@@ -334,7 +342,7 @@ xt = XtQuantRemote("192.168.1.100", log_level="DEBUG")
 
 客户端日志示例：
 ```
-2026-02-28 23:50:01.123 | INFO  | [OK] xtdata.get_market_data | 111.23ms | DataFrame[shape=(100, 6)]
+2026-02-28 23:50:01.123 | INFO  | [OK] xtdata.get_market_data | 111.23ms | <DataFrame>
 2026-02-28 23:50:02.456 | INFO  | [OK] xtdata.get_full_tick | 22.11ms | dict[1 keys]
 2026-02-28 23:50:05.000 | ERROR | [ERROR] xtdata.get_market_data | 5000.00ms | TimeoutError: Connection timed out
 ```
@@ -349,15 +357,15 @@ xt = XtQuantRemote("192.168.1.100", log_level="DEBUG")
 |------|------|--------|
 | host | 服务端地址 | localhost |
 | port | 服务端端口 | 18812 |
-| client_id | 客户端标识 | default |
-| client_secret | 认证密钥 | 空 |
+| client_id | 客户端标识 | client-standard |
+| client_secret | 认证密钥 | xqshare-default-secret |
 | use_ssl | 启用 SSL | False |
 | ssl_verify | 验证 SSL 证书 | True |
 | auto_reconnect | 自动重连 | True |
 | max_retries | 最大重试次数 | 5 |
 | heartbeat_interval | 心跳间隔(秒) | 30 |
 | log_level | 日志级别 | INFO |
-| callback_port | 回调服务器端口 | 0(自动) |
+| env_file | 环境变量文件路径 | None |
 
 ### 服务端参数
 
@@ -369,26 +377,48 @@ xt = XtQuantRemote("192.168.1.100", log_level="DEBUG")
 | --cert | SSL 证书文件 | - |
 | --key | SSL 私钥文件 | - |
 | --log-level | 日志级别 | INFO |
+| --env-file | 环境变量文件 | .env |
 
 ---
 
 ## 认证机制
 
-服务端和客户端需要配置相同的密钥，详见上方"环境变量配置"。
+服务端默认从当前工作目录读取 `clients.yaml`，为每个客户端配置独立密钥和账号等级。可以复制示例文件后修改：
 
-### 多客户端认证
-
-服务端为每个客户端配置独立密钥：
 ```bash
-export XQSHARE_CLIENT_app1="secret-for-app1"
-export XQSHARE_CLIENT_app2="secret-for-app2"
+cp clients.yaml.example clients.yaml
 ```
 
-客户端：
-```python
-xt1 = XtQuantRemote(client_id="app1", client_secret="secret-for-app1")
-xt2 = XtQuantRemote(client_id="app2", client_secret="secret-for-app2")
+配置示例：
+
+```yaml
+clients:
+  readonly:
+    secret: "readonly-secret"
+    level: standard
+  trader:
+    secret: "trader-secret"
+    level: enterprise
 ```
+
+客户端连接时指定对应的 `client_id` 和 `client_secret`：
+
+```python
+xt1 = XtQuantRemote(client_id="readonly", client_secret="readonly-secret")
+xt2 = XtQuantRemote(client_id="trader", client_secret="trader-secret")
+```
+
+账号等级权限：
+
+| 等级 | 权限 |
+|------|------|
+| free | 基础信息 + 日线数据 |
+| plus | free + 分钟线数据 |
+| standard | plus + 实时行情 + 回调功能 |
+| premium | standard + 交易查询 |
+| enterprise | premium + 下单/撤单 |
+
+如果没有 `clients.yaml`，服务端会启用默认客户端 `client-standard` / `xqshare-default-secret`（standard 等级）。生产环境请务必创建 `clients.yaml` 并使用强密钥。
 
 ---
 
@@ -425,7 +455,6 @@ xt = XtQuantRemote(
 - **检测机制**：心跳超时、调用异常
 - **重连策略**：指数退避（1s → 2s → 4s → 8s → 16s...）
 - **最大重试**：默认 5 次
-- **自动恢复订阅**：重连后自动重新订阅行情
 
 ```python
 xt = XtQuantRemote(
@@ -444,6 +473,7 @@ xt = XtQuantRemote(
 xqshare/
 ├── xqshare/                # 包目录
 │   ├── __init__.py         # 包入口
+│   ├── auth.py             # 认证与权限控制
 │   ├── client.py           # 客户端
 │   ├── server.py           # 服务端
 │   └── tools/              # 命令行工具
@@ -462,8 +492,12 @@ xqshare/
 │   └── query_positions.py     # 查询账户持仓
 ├── tests/                  # 测试目录
 │   ├── __init__.py
+│   ├── test_auth.py       # 认证与权限测试
 │   ├── test_client.py      # 客户端测试
+│   ├── test_client_permission.py # 客户端权限测试
 │   ├── test_server.py      # 服务端测试
+│   ├── test_server_permission.py # 服务端权限测试
+│   ├── test_tools_common.py # 命令行工具公共逻辑测试
 │   └── test_integration.py # 集成测试
 ├── README.md               # 文档
 ├── pyproject.toml          # 包配置
@@ -526,8 +560,8 @@ python -m build
 # 检查生成的包
 ls -la dist/
 # dist/
-# ├── xqshare-1.0.0-py3-none-any.whl
-# └── xqshare-1.0.0.tar.gz
+# ├── xqshare-1.1.1-py3-none-any.whl
+# └── xqshare-1.1.1.tar.gz
 
 # 验证包格式
 twine check dist/*
@@ -577,7 +611,7 @@ python -c "from xqshare import XtQuantRemote; print('OK')"
 ## 注意事项
 
 1. **网络延迟**：远程调用有网络延迟，高频场景建议批量获取
-2. **数据序列化**：复杂对象通过 pickle 序列化，确保两端 Python 版本兼容
+2. **数据序列化**：DataFrame、列表、字典会尽量使用 CSV/JSON 优化传输，复杂对象仍由 RPyC 远程对象机制处理
 3. **安全性**：生产环境建议启用 SSL + 强密码认证
 4. **防火墙**：确保服务端端口（默认 18812）可访问
 5. **日志清理**：定期清理日志文件，避免磁盘占用过大
@@ -610,7 +644,7 @@ telnet 192.168.1.100 18812
 # 客户端查询服务端状态
 status = xt.get_service_status()
 print(status)
-# {'uptime': 3600, 'active_tokens': 2, 'active_callbacks': 5}
+# {'uptime': 3600, 'client_id': 'client-standard'}
 ```
 
 ---

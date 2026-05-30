@@ -11,10 +11,10 @@ xtdata - 行情数据命令行工具
 使用示例:
     # 工具参数在 command 之前
     xtdata --limit 100 get_stock_list_in_sector --sector-name "沪深A股"
-    xtdata --host 192.168.1.100 get_full_tick --codes "000001.SZ"
+    xtdata --host 192.168.1.100 get_full_tick --code-list "['000001.SZ']"
 
     # 使用环境变量配置连接，只传 API 参数
-    xtdata get_market_data_ex --codes "000001.SZ" --period 1d
+    xtdata get_market_data_ex --stock-list "['000001.SZ']" --period 1d
 """
 
 import sys
@@ -42,7 +42,7 @@ def main():
 
 示例:
   xtdata --limit 100 get_stock_list_in_sector --sector-name "沪深A股"
-  xtdata --host 192.168.1.100 get_full_tick --codes "000001.SZ"
+  xtdata --host 192.168.1.100 get_full_tick --code-list "['000001.SZ']"
         """
     )
     add_global_args(parser)
