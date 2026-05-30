@@ -144,9 +144,9 @@ class TestClientProperties:
                 assert hasattr(client, 'xtdata')
                 assert isinstance(client._xtdata, RemoteModule)
 
-    def test_xttrader_property(self):
-        """测试 xttrader 属性"""
-        from xqshare.client import XtQuantRemote, RemoteModule
+    def test_create_trader_method_exists(self):
+        """测试交易实例通过 create_trader 创建"""
+        from xqshare.client import XtQuantRemote
 
         mock_conn = MagicMock()
         mock_root = MagicMock()
@@ -164,8 +164,7 @@ class TestClientProperties:
                     heartbeat_interval=0
                 )
 
-                assert hasattr(client, 'xttrader')
-                assert isinstance(client._xttrader, RemoteModule)
+                assert callable(client.create_trader)
 
 
 class TestClientEnvConfig:

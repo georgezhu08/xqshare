@@ -11,6 +11,21 @@ import tempfile
 from unittest.mock import MagicMock, patch
 
 
+def pytest_collection_modifyitems(config, items):
+    """默认跳过需要真实服务端的集成测试。"""
+    if os.environ.get("XQSHARE_RUN_INTEGRATION"):
+        return
+    if "integration" in getattr(config.option, "markexpr", ""):
+        return
+    if items and all("integration" in item.keywords for item in items):
+        return
+
+    skip_integration = pytest.mark.skip(reason="set XQSHARE_RUN_INTEGRATION=1 to run integration tests")
+    for item in items:
+        if "integration" in item.keywords:
+            item.add_marker(skip_integration)
+
+
 # ==================== Mock xtquant 模块 ====================
 
 @pytest.fixture(scope="session", autouse=True)

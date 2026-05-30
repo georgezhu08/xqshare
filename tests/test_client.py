@@ -4,19 +4,13 @@ XtQuant Share (xqshare) Client Tests
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-import threading
-import time
 
 # Import the client module
 import sys
 sys.path.insert(0, '.')
 from xqshare.client import (
     XtQuantRemote,
-    ConnectionError,
-    AuthenticationError,
-    CallbackError,
     ReconnectPolicy,
-    CallbackServer,
     RemoteModule,
 )
 
@@ -38,37 +32,6 @@ class TestReconnectPolicy:
     def test_max_delay(self):
         policy = ReconnectPolicy(max_retries=5, base_delay=1, max_delay=10, backoff_factor=2)
         assert policy.get_delay(10) == 10  # cap at max_delay
-
-
-class TestCallbackServer:
-    """测试回调服务器"""
-    
-    def test_register_callback(self):
-        server = CallbackServer(port=0)
-        callback = Mock()
-        server.register("test_id", callback)
-        assert "test_id" in server._callbacks
-    
-    def test_unregister_callback(self):
-        server = CallbackServer(port=0)
-        callback = Mock()
-        server.register("test_id", callback)
-        server.unregister("test_id")
-        assert "test_id" not in server._callbacks
-    
-    def test_invoke_callback(self):
-        server = CallbackServer(port=0)
-        callback = Mock(return_value="result")
-        server.register("test_id", callback)
-        
-        result = server._invoke_callback("test_id", "arg1", "arg2")
-        callback.assert_called_once_with("arg1", "arg2")
-        assert result == "result"
-    
-    def test_invoke_nonexistent_callback(self):
-        server = CallbackServer(port=0)
-        with pytest.raises(CallbackError):
-            server._invoke_callback("nonexistent")
 
 
 class TestRemoteModule:
@@ -117,6 +80,24 @@ class TestRemoteModule:
         with pytest.raises(Exception):
             remote.test_func()
 
+    def test_deserializes_wrapped_result(self):
+        mock_client = Mock()
+        mock_client._ensure_connected = Mock()
+        mock_client._should_reconnect = Mock(return_value=False)
+        mock_client._conn = Mock()
+
+        mock_module = Mock()
+        mock_module.test_func = Mock(return_value={
+            "__xqshare_serialized__": "json",
+            "data": '{"ok": true}',
+        })
+        mock_client._conn.root.get_xtdata = Mock(return_value=mock_module)
+
+        remote = RemoteModule(mock_client, 'xtdata')
+        result = remote.test_func()
+
+        assert result == {"ok": True}
+
 
 class TestXtQuantRemote:
     """测试主客户端类"""
@@ -136,7 +117,7 @@ class TestXtQuantRemote:
     def test_connect_with_auth(self, mock_connect):
         mock_conn = Mock()
         mock_conn.root.ping = Mock(return_value="pong")
-        mock_conn.root.authenticate = Mock(return_value="test_token")
+        mock_conn.root.authenticate = Mock(return_value={"success": True, "level": "standard"})
         mock_connect.return_value = mock_conn
         
         client = XtQuantRemote(
@@ -147,7 +128,7 @@ class TestXtQuantRemote:
         )
         
         mock_conn.root.authenticate.assert_called_once()
-        assert client._token == "test_token"
+        assert client._account_level == "standard"
     
     @patch('xqshare.client.rpyc.connect')
     def test_context_manager(self, mock_connect):
