@@ -265,3 +265,21 @@ AI: 数据下载完成，现在获取K线数据...
 |-----|----------|------|
 | `get_market_data` | `{字段: DataFrame}` | 按字段组织，每字段一个 DataFrame（行=股票，列=日期） |
 | `get_market_data_ex` | `{股票: DataFrame}` | 按股票组织，每股票一个 DataFrame（行=日期，列=字段），推荐 |
+
+## Python API 日志控制
+
+使用 Python API 时，可以在运行时开关日志：
+
+```python
+from xqshare import connect, xtdata, disable_logging, enable_logging
+
+connect("192.168.1.100")
+
+# 关闭日志（批量调用时推荐）
+disable_logging()
+stocks = xtdata.get_stock_list_in_sector("沪深A股")
+df = xtdata.get_market_data_ex(stock_list=["000001.SZ"], period="1d")
+
+# 重新打开
+enable_logging()
+```

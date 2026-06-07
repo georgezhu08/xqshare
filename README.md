@@ -10,6 +10,7 @@
 - ✅ **心跳保活** - 定期心跳检测，保持连接活跃
 - ✅ **异步回调** - 支持行情订阅等回调场景
 - ✅ **完整日志** - API调用日志，记录函数名、参数、耗时
+- ✅ **日志开关** - 运行时打开/关闭日志，无需重启
 - ✅ **零学习成本** - 无需记忆新 API
 
 ## 架构
@@ -347,6 +348,50 @@ xt = XtQuantRemote("192.168.1.100", log_level="DEBUG")
 2026-02-28 23:50:05.000 | ERROR | [ERROR] xtdata.get_market_data | 5000.00ms | TimeoutError: Connection timed out
 ```
 
+### 运行时日志开关
+
+可以在运行过程中随时打开或关闭客户端日志，无需重启连接：
+
+```python
+from xqshare import set_logging, enable_logging, disable_logging, is_logging_enabled
+
+# 关闭日志（安静模式）
+disable_logging()
+stocks = xt.xtdata.get_stock_list_in_sector("沪深A股")  # 无日志输出
+
+# 重新打开
+enable_logging()
+
+# 检查当前状态
+print(is_logging_enabled())  # True
+
+# 或用 set_logging 控制
+set_logging(False)  # 关闭
+set_logging(True)   # 打开
+```
+
+也可以使用实例方法：
+
+```python
+xt = XtQuantRemote("192.168.1.100")
+xt.set_logging(False)   # 关闭此实例的日志
+# ... 执行大量调用 ...
+xt.set_logging(True)    # 重新打开
+```
+
+关闭后，所有 `[CALL]`/`[OK]`/`[ERROR]` 级别的 API 调用日志都会被抑制，但异常仍会正常传播。日志文件和控制台输出同时受影响。
+
+服务端也支持远程日志控制：
+
+```python
+# 远程关闭服务端日志
+xt._conn.root.set_server_logging(False)
+
+# 查询服务端日志状态
+status = xt._conn.root.get_server_logging_status()
+print(status)  # {"enabled": False}
+```
+
 ---
 
 ## 配置选项
@@ -653,6 +698,7 @@ print(status)
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
+| 1.2.0 | 2026-06-07 | 新增运行时日志开关（set_logging / enable_logging / disable_logging），支持远程控制服务端日志 |
 | 1.1.1 | 2026-03-18 | 新增 xtview 模块支持（视图控制、调度任务管理），兼容不同 xtquant 版本 |
 | 1.1.0 | 2026-03-17 | 交易功能优化完善、`xqshare-server` 命令、`.env` 配置支持、远程对象传输性能优化 |
 | 1.0.4 | 2026-03-09 | JSON 输出优化：远程 DataFrame 高效序列化、`--compact` 参数、全局参数位置灵活、嵌套结构支持 |

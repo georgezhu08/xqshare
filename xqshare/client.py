@@ -58,19 +58,70 @@ def setup_logging(log_level: str = "INFO", quiet: bool = False):
 
 _logger = None
 _quiet_mode = False
+_logging_enabled = True
+_original_log_level = logging.INFO
 
 
 def set_quiet_mode(quiet: bool = True):
-    """设置静默模式"""
+    """设置静默模式（兼容旧接口，推荐使用 set_logging）"""
     global _quiet_mode
     _quiet_mode = quiet
+    if _logger is not None:
+        # 如果 logger 已经创建，实时生效
+        if quiet:
+            _logger.setLevel(logging.CRITICAL)
+        else:
+            _logger.setLevel(_original_log_level)
 
 
 def get_logger():
-    global _logger
+    global _logger, _original_log_level
     if _logger is None:
         _logger = setup_logging(quiet=_quiet_mode)
+        _original_log_level = _logger.level
     return _logger
+
+
+def set_logging(enabled: bool = True):
+    """运行时开关：打开/关闭客户端 API 调用日志
+
+    关闭后，所有 INFO/ERROR 级别的 API 调用日志（[CALL]/[OK]/[ERROR]）
+    都将被抑制，但异常仍会正常传播给调用方。
+
+    Args:
+        enabled: True 打开日志，False 关闭日志
+
+    Example:
+        from xqshare.client import set_logging
+        set_logging(False)   # 关闭日志
+        stocks = xt.xtdata.get_stock_list_in_sector("沪深A股")  # 无日志输出
+        set_logging(True)    # 重新打开
+    """
+    global _logging_enabled, _original_log_level
+    _logging_enabled = enabled
+    logger = get_logger()
+    if enabled:
+        logger.setLevel(_original_log_level)
+    else:
+        if _original_log_level is None:
+            _original_log_level = logger.level
+        logger.setLevel(logging.CRITICAL)
+
+
+def enable_logging():
+    """打开客户端 API 调用日志"""
+    set_logging(True)
+
+
+def disable_logging():
+    """关闭客户端 API 调用日志"""
+    set_logging(False)
+
+
+def is_logging_enabled() -> bool:
+    """检查日志是否已打开（检查实际 logger 级别）"""
+    logger = get_logger()
+    return logger.level < logging.CRITICAL
 
 
 # ==================== 反序列化传输数据 ====================
@@ -596,6 +647,21 @@ class XtQuantRemote:
                 pass
         self._conn = None
         self._logger.info("连接已关闭")
+
+    def set_logging(self, enabled: bool = True):
+        """运行时开关：打开/关闭此客户端实例的 API 调用日志
+
+        等价于模块级 set_logging()，但作为实例方法更便于链式调用。
+
+        Args:
+            enabled: True 打开日志，False 关闭日志
+
+        Example:
+            xt = XtQuantRemote("192.168.1.100")
+            xt.set_logging(False)   # 关闭日志
+            xt.set_logging(True)    # 重新打开
+        """
+        set_logging(enabled)
     
     def __enter__(self):
         return self

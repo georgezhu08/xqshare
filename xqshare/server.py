@@ -98,6 +98,56 @@ def _init_logging(log_level="INFO"):
     api_logger = logging.getLogger('api')
 
 
+_server_logging_enabled = True
+_server_original_level = logging.INFO
+_server_api_original_level = logging.DEBUG
+
+
+def set_server_logging(enabled: bool = True):
+    """运行时开关：打开/关闭服务端 API 调用日志
+
+    关闭后，所有服务端日志（连接事件、API 调用 [CALL]/[OK]/[ERROR]）
+    都将被抑制。不影响客户端日志。
+
+    Args:
+        enabled: True 打开日志，False 关闭日志
+
+    Example:
+        from xqshare.server import set_server_logging
+        set_server_logging(False)   # 关闭服务端日志
+        set_server_logging(True)    # 重新打开
+    """
+    global _server_logging_enabled, _server_original_level, _server_api_original_level
+    _server_logging_enabled = enabled
+    if logger is not None:
+        if enabled:
+            logger.setLevel(_server_original_level)
+            if api_logger is not None:
+                api_logger.setLevel(_server_api_original_level)
+        else:
+            _server_original_level = logger.level
+            if api_logger is not None:
+                _server_api_original_level = api_logger.level
+            logger.setLevel(logging.CRITICAL)
+            if api_logger is not None:
+                api_logger.setLevel(logging.CRITICAL)
+
+
+def enable_server_logging():
+    """打开服务端 API 调用日志"""
+    set_server_logging(True)
+
+
+def disable_server_logging():
+    """关闭服务端 API 调用日志"""
+    set_server_logging(False)
+
+
+def is_server_logging_enabled() -> bool:
+    """检查服务端日志是否已打开"""
+    return _server_logging_enabled
+
+
 # ==================== 日志装饰器 ====================
 
 def _log_call(name: str, client_info: str, func, *args, **kwargs):
@@ -408,6 +458,28 @@ class XtQuantService(rpyc.Service):
     @log_api_call("heartbeat")
     def exposed_heartbeat(self):
         return "pong"
+
+    # ==================== 日志控制接口 ====================
+
+    def exposed_set_server_logging(self, enabled: bool = True):
+        """远程控制：打开/关闭服务端日志
+
+        Args:
+            enabled: True 打开日志，False 关闭日志
+
+        Returns:
+            dict: {"success": True, "enabled": bool}
+        """
+        set_server_logging(enabled)
+        return {"success": True, "enabled": enabled}
+
+    def exposed_get_server_logging_status(self):
+        """查询服务端日志状态
+
+        Returns:
+            dict: {"enabled": bool}
+        """
+        return {"enabled": is_server_logging_enabled()}
 
     # ==================== 模块代理接口 ====================
 

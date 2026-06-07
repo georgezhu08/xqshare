@@ -19,6 +19,11 @@ from .client import (
     ConnectionError,
     AuthenticationError,
     CallbackError,
+    set_logging,
+    enable_logging,
+    disable_logging,
+    is_logging_enabled,
+    set_quiet_mode,
 )
 
 __all__ = [
@@ -33,4 +38,9 @@ __all__ = [
     "ConnectionError",
     "AuthenticationError",
     "CallbackError",
+    "set_logging",
+    "enable_logging",
+    "disable_logging",
+    "is_logging_enabled",
+    "set_quiet_mode",
 ]

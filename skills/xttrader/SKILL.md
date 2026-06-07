@@ -154,6 +154,21 @@ AI: 即将执行下单操作：
 AI: [执行命令]
 ```
 
+## Python API 日志控制
+
+使用 Python API 时，可以在运行时开关日志：
+
+```python
+from xqshare import connect, disable_logging, enable_logging
+
+connect("192.168.1.100")
+
+# 关闭日志
+disable_logging()
+# ... 执行交易操作 ...
+enable_logging()
+```
+
 ## 限制
 
 - **不支持 subscribe/register 开头的命令**（需要回调）
