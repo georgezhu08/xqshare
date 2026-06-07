@@ -297,11 +297,15 @@ with XtQuantRemote("192.168.1.100", client_secret="my-secret") as xt:
 
 ### 服务端日志
 
+日志文件每日午夜自动轮转，可通过 `--log-retention` 设置保留天数（默认 0 = 不限制）。
+
 **日志文件位置：**
 ```
 logs/
-├── xtquant_service_20260228.log    # 主日志
-└── api_calls_20260228.log          # API调用日志（单独文件）
+├── xtquant_service.log            # 主日志（当天）
+├── xtquant_service.log.2026-06-06 # 历史日志（自动轮转）
+├── api_calls.log                  # API调用日志（当天）
+└── api_calls.log.2026-06-06       # 历史日志
 ```
 
 **日志格式：**
@@ -422,6 +426,7 @@ print(status)  # {"enabled": False}
 | --cert | SSL 证书文件 | - |
 | --key | SSL 私钥文件 | - |
 | --log-level | 日志级别 | INFO |
+| --log-retention | 日志保留天数（0=不限制），环境变量: XQSHARE_LOG_RETENTION | 0 |
 | --env-file | 环境变量文件 | .env |
 
 ---

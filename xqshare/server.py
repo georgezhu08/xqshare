@@ -8,6 +8,7 @@ import time
 import os
 import ssl
 import logging
+from logging.handlers import TimedRotatingFileHandler
 import functools
 import json
 from datetime import datetime
@@ -49,42 +50,84 @@ except ImportError:
 
 # ==================== 日志配置 ====================
 
-def setup_logging(log_dir: str = None, log_level: str = "INFO"):
-    """配置日志系统"""
+def _make_rotating_handler(filename, backup_count=0):
+    """创建每日轮转的日志 handler（兼容 Python 3.8+）
+
+    Args:
+        filename: 日志文件路径
+        backup_count: 保留的历史日志天数，0 表示不限制
+
+    Returns:
+        TimedRotatingFileHandler 实例
+    """
+    try:
+        return TimedRotatingFileHandler(
+            filename, when='midnight', interval=1,
+            backupCount=backup_count, encoding='utf-8'
+        )
+    except TypeError:
+        # Python 3.8 不支持 encoding 参数
+        handler = TimedRotatingFileHandler(
+            filename, when='midnight', interval=1,
+            backupCount=backup_count
+        )
+        # 手动设置 UTF-8 编码（关闭构造函数打开的旧 stream，开新 stream）
+        handler.encoding = 'utf-8'
+        import io
+        handler.stream.close()
+        handler.stream = io.open(
+            handler.baseFilename, handler.mode,
+            encoding='utf-8'
+        )
+        return handler
+
+
+def setup_logging(log_dir: str = None, log_level: str = "INFO", log_retention: int = 0):
+    """配置日志系统
+
+    Args:
+        log_dir: 日志目录，默认从 XQSHARE_LOG_DIR 环境变量读取
+        log_level: 日志级别，默认 INFO
+        log_retention: 日志保留天数，0 表示不自动删除（默认 0）
+                       大于 0 时，每日轮转并自动删除超过天数的旧日志
+    """
     if log_dir is None:
         log_dir = os.environ.get("XQSHARE_LOG_DIR", "logs")
     os.makedirs(log_dir, exist_ok=True)
-    
+
     formatter = logging.Formatter(
         fmt='%(asctime)s.%(msecs)03d | %(levelname)-8s | %(name)s | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    
+
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, log_level.upper()))
-    
+
+    # 控制台 handler（不轮转）
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     console_handler.setLevel(logging.INFO)
     root_logger.addHandler(console_handler)
-    
-    file_handler = logging.FileHandler(
-        os.path.join(log_dir, f"xtquant_service_{datetime.now().strftime('%Y%m%d')}.log"),
-        encoding='utf-8'
+
+    # 主日志：每日轮转
+    file_handler = _make_rotating_handler(
+        os.path.join(log_dir, "xtquant_service.log"),
+        backup_count=log_retention
     )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.DEBUG)
     root_logger.addHandler(file_handler)
-    
-    api_handler = logging.FileHandler(
-        os.path.join(log_dir, f"api_calls_{datetime.now().strftime('%Y%m%d')}.log"),
-        encoding='utf-8'
+
+    # API 日志：每日轮转
+    api_handler = _make_rotating_handler(
+        os.path.join(log_dir, "api_calls.log"),
+        backup_count=log_retention
     )
     api_handler.setFormatter(formatter)
     api_logger = logging.getLogger('api')
     api_logger.addHandler(api_handler)
     api_logger.setLevel(logging.DEBUG)
-    
+
     return logging.getLogger(__name__)
 
 
@@ -92,9 +135,9 @@ logger = None
 api_logger = None
 
 
-def _init_logging(log_level="INFO"):
+def _init_logging(log_level="INFO", log_retention: int = 0):
     global logger, api_logger
-    logger = setup_logging(log_level=log_level)
+    logger = setup_logging(log_level=log_level, log_retention=log_retention)
     api_logger = logging.getLogger('api')
 
 
@@ -667,7 +710,7 @@ def create_ssl_context(certfile=None, keyfile=None):
     return ctx
 
 
-def start_server(host="0.0.0.0", port=None, use_ssl=False, certfile=None, keyfile=None, log_level="INFO", env_file=None):
+def start_server(host="0.0.0.0", port=None, use_ssl=False, certfile=None, keyfile=None, log_level="INFO", env_file=None, log_retention: int = None):
     """启动服务
 
     Args:
@@ -678,6 +721,7 @@ def start_server(host="0.0.0.0", port=None, use_ssl=False, certfile=None, keyfil
         keyfile: SSL 密钥文件
         log_level: 日志级别
         env_file: 环境变量文件路径（None 时自动查找 .env）
+        log_retention: 日志保留天数，0 表示不自动删除（默认 0）
     """
     # 加载环境变量文件（None 时自动查找 .env）
     try:
@@ -689,11 +733,14 @@ def start_server(host="0.0.0.0", port=None, use_ssl=False, certfile=None, keyfil
     if port is None:
         port = int(os.environ.get("XQSHARE_PORT", "18812"))
 
+    if log_retention is None:
+        log_retention = int(os.environ.get("XQSHARE_LOG_RETENTION", "0"))
+
     if not XTQUANT_AVAILABLE:
         print("错误: xtquant 库未安装，请先安装 xtquant")
         return
 
-    _init_logging(log_level)
+    _init_logging(log_level, log_retention)
     XtQuantService._start_time = time.time()
 
     print("=" * 70)
@@ -702,6 +749,7 @@ def start_server(host="0.0.0.0", port=None, use_ssl=False, certfile=None, keyfil
     print(f"  监听地址: {host}:{port}")
     print(f"  SSL 加密: {'启用' if use_ssl else '禁用'}")
     print(f"  日志级别: {log_level}")
+    print(f"  日志保留: {'不限制' if log_retention == 0 else f'{log_retention} 天'}")
     print("=" * 70)
     
     # 预加载权限检查器（加载 clients.yaml 配置）
@@ -799,6 +847,8 @@ def main():
     parser.add_argument("--cert", help="SSL 证书文件")
     parser.add_argument("--key", help="SSL 私钥文件")
     parser.add_argument("--log-level", default="INFO", help="日志级别 (默认: INFO)")
+    parser.add_argument("--log-retention", type=int, default=None, 
+                        help="日志保留天数，0=不限制 (默认: 0，环境变量: XQSHARE_LOG_RETENTION)")
     parser.add_argument("--env-file", default=".env", help="环境变量文件 (默认: .env)")
 
     args = parser.parse_args()
@@ -810,6 +860,7 @@ def main():
         certfile=args.cert,
         keyfile=args.key,
         log_level=args.log_level,
+        log_retention=args.log_retention,
         env_file=args.env_file
     )
 
